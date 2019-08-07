@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 import datetime
+from datetime import timedelta
 from datetime import datetime
 from dateutil import parser
 import numpy as np
@@ -32,6 +33,8 @@ from IPython.display import display
 from IPython.display import clear_output
 
 import re
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
 
 
 
@@ -98,8 +101,7 @@ def model_on_click(b):
         propiedades[0]=0
         propiedades[1]=drop_date.value
         propiedades[2]=depth_wid.value
-        propiedades[3]= None
-        propiedades[4]= None
+        calcula_min_max()
         actualiza_layout()
 
 
@@ -136,7 +138,7 @@ def set_display():
     drop_date=widgets.Dropdown(
         options=[(str(date[i]), i) for i in range(len(date))],
         value=0,
-        description='Fecha:',
+        description='Date:',
     )
     drop_date.observe(date_on_change, names='value')
     drop_var.observe(variable_on_change, names='value')
@@ -167,7 +169,7 @@ def set_display():
         description='Depth'
     )
 
-    Label_cor= widgets.Label("Click on the map to choose the coordinates of which to see the evolution:")
+    Label_cor= widgets.Label("Click on the map to choose the coordinates:")
 
     vb_ev_text= VBox([valor_x, valor_y])
     vb_ev_bot= VBox([boton_tiempo, boton_prof])
@@ -182,14 +184,19 @@ def set_display():
     
 def set_date():
     date=[]
-    for i in range(len(dataset.variables[time])-1):
-        date=np.append(date, humanize_time(dataset.variables[time][i]))
+    t=dataset.variables[time].units
+    year= int(re.findall(r'seconds since ([0-9]*)-',t)[0])
+    month= int(re.findall(r'seconds since [0-9]*-([0-9]*)',t)[0])
+    day= int(re.findall(r'seconds since [0-9]*-[0-9]*-([0-9]*)',t)[0])
+    
+    a = datetime(year,month,day,0,0,0)
+    
+    for n in dataset.variables[time]:
+        b = a + timedelta(seconds=int(n))
+        date=np.append(date, b)
+        
     return date
 
-def humanize_time(secs):
-    mins, secs = divmod(secs, 60)
-    hours, mins = divmod(mins, 60)
-    return '%02d:%02d:%02d' % (hours, mins, secs)  
 
 
 
@@ -198,19 +205,26 @@ def actualiza_layout():
 
     clear()
     des=""
+    max_value= "Max value: "+ str(propiedades[4])
+    min_value= "Min value: "+ str(propiedades[3])
+    
     try:
         des=lista[0][propiedades[0]]+": "+dataset.variables[lista[0][propiedades[0]]].long_name
     except:
-        des="Variable sin descripción"
+        des="Variable with no description"
         
     label= widgets.Label(des)
+    label_min= widgets.Label(min_value)
+    label_max= widgets.Label(max_value)
+    
+    hb_max_min= HBox([label_min, label_max])
     if lista[1][propiedades[0]]==4:
-        display(hb_3d, label)
+        display(hb_3d, label, hb_max_min)
         aux=dataset.variables[lista[0][propiedades[0]]][propiedades[1],propiedades[2],:,:]
         ev=vb_ev_3d
         
     if lista[1][propiedades[0]]==3:
-        display(hb_2d, label)
+        display(hb_2d, label, hb_max_min)
         aux=dataset.variables[lista[0][propiedades[0]]][propiedades[1],:,:]
         ev=vb_ev_2d
         
@@ -295,23 +309,43 @@ def muestra_ev_prof():
     eje_x=[dataset.variables[lista[0][propiedades[0]]][propiedades[1],i,valor_x.value, valor_y.value] for i in range(34)]
     
     plt.plot(eje_x,eje_y)
+    
     plt.title(lista[0][propiedades[0]])
-    plt.xlabel("profundidad")
+    plt.ylabel("layer")
+    
+    try:
+        plt.xlabel(lista[0][propiedades[0]]+": "+dataset.variables[lista[0][propiedades[0]]].units)
+    except:
+        plt.xlabel("#")
     
 def muestra_ev_tiempo():
     fig3= plt.figure()
     fig3.add_subplot()
     
     eje_x=[date[i] for i in range(len(dataset.variables[time])-1)]
+    ax=[]
+    for i in range(int(len(dataset.variables[time])/4)):
+        d= str(date[i*4].month)+"-"+str(date[i*4].day)
+        ax= np.append(ax, d)
+        ax= np.append(ax, " ")
+        ax= np.append(ax, " ")
+        ax= np.append(ax, " ")
+    
     if lista[1][propiedades[0]]==4:
         eje_y=[dataset.variables[lista[0][propiedades[0]]][i,propiedades[2],valor_x.value, valor_y.value] for i in range(dataset.dimensions[time].size -1)]
     
     if lista[1][propiedades[0]]==3:
         eje_y=[dataset.variables[lista[0][propiedades[0]]][i,valor_x.value, valor_y.value] for i in range(dataset.dimensions[time].size -1)]
     
+    plt.xticks(eje_x,ax)
     plt.plot(eje_x,eje_y)
     plt.title(lista[0][propiedades[0]])
-    plt.xlabel("time")
+    plt.xlabel("date")
+    
+    try:
+        plt.ylabel(lista[0][propiedades[0]]+": "+dataset.variables[lista[0][propiedades[0]]].units)
+    except:
+        plt.ylabel("#")
     
 def on_button_clicked_ev_prof(b):
     actualiza_layout()
@@ -327,5 +361,5 @@ def on_button_clicked_ev_time(b):
 #Menu
 menu = widgets.Tab()
 menu.children = [vbox1, vbox3]
-menu.set_title(0,'Ajustes')
+menu.set_title(0,'Settings')
 menu.set_title(1,'Model visualization')
