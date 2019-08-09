@@ -3,10 +3,14 @@ import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 import datetime
+
+import re
+
 from datetime import timedelta
 from datetime import datetime
 from dateutil import parser
 import numpy as np
+from numpy.ma import masked_array, masked_inside, masked_outside
 import os, shutil
 import requests
 import json
@@ -32,7 +36,8 @@ from ipywidgets import HBox, VBox, Layout
 from IPython.display import display
 from IPython.display import clear_output
 
-import re
+
+#warning plot
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 
@@ -40,11 +45,10 @@ register_matplotlib_converters()
 
 #Model visualization
 
-ruta= "/home/jovyan/datasets"
 
-def nombre_modelo(nombre):
-    return re.findall(r'/home/jovyan/datasets/([A-Za-z0-9\_\-]*)',nombre)[0]
 
+
+#busca los ficheros netCDF en la ruta indicada
 def busca_modelos(ruta):
     files= [os.path.abspath(arch.path) for arch in os.scandir(ruta) if arch.is_file()]
     lstFiles = []
@@ -55,8 +59,16 @@ def busca_modelos(ruta):
             #print (nombreFichero+extension)
     return(lstFiles)
 
+#separo el nombre del fichero de la ruta
+def nombre_modelo(nombre):
+    return re.findall(r'/home/jovyan/datasets/([A-Za-z0-9\_\-]*)',nombre)[0]
+
+
+#ruta donde se guardan los ficheros netCDF
+ruta= "/home/jovyan/datasets"
 opt = busca_modelos(ruta)
 
+#Inicialización de widgets
 selection = widgets.Select(
     options=opt,
     value=opt[0],
@@ -84,20 +96,25 @@ button3 = widgets.Button(
 
 out3 = widgets.Output()
 
+vbox3 = VBox(children=[selection,button3,out3])
+vbox1 = VBox()
 
 
-
+#Cuando se clica el boton se carga el fichero con el modulo indicado y se muestra la info
 @button3.on_click
 def model_on_click(b):
-    global dataset, lista, propiedades
+    global dataset, variables, propiedades
     nombre_dataset= ruta+"/"+selection.value+".nc"
     dataset= Dataset(nombre_dataset, 'r', format='NETCDF4_CLASSIC')
-    lista=[[],[],[]]
+    #variables[nombre_variable, num_dim]
+    variables=[[],[]]
+    #propiedades[index_var_escogida,fecha,profundidad,min_value_var, max_value_var]
     propiedades=[[],[],[],[],[]]
+    
     carga_variables()
     set_display()
+    
     with out3:
-        clear_output()
         propiedades[0]=0
         propiedades[1]=drop_date.value
         propiedades[2]=depth_wid.value
@@ -105,15 +122,9 @@ def model_on_click(b):
         actualiza_layout()
 
 
-            
-            
-vbox3 = VBox(children=[selection,button3,out3])
-vbox1 = VBox()
-
-
-
+#Se comprueba cual es la variable tiempo en el modelo y se cargan en "variables" las variables del modelo
 def carga_variables():
-    global drop_var, lista, time
+    global drop_var, variables, time
     for n in dataset.variables.keys():
         if n.find("time") >= 0:
             time=n
@@ -123,14 +134,14 @@ def carga_variables():
         
         dim=len(dataset.variables[n].dimensions)
         if dim > 2 and dim <5:
-            lista[0]= np.append(lista[0],n)
-            lista[1]= np.append(lista[1],dim)
-            lista[2]= np.append(lista[2],dimensiones)
+            variables[0]= np.append(variables[0],n)
+            variables[1]= np.append(variables[1],dim)
 
+#Se inicializan los widgets 
 def set_display():
     global drop_var, drop_date, depth_wid, hb_3d, hb_2d, vb_ev_2d, vb_ev_3d, valor_x, valor_y, date
     drop_var=widgets.Dropdown(
-        options=[(lista[0][n], n) for n in range(len(lista[0]))],
+        options=[(variables[0][n], n) for n in range(len(variables[0]))],
         value=0,
         description='Variables:',
     )
@@ -181,7 +192,8 @@ def set_display():
     boton_prof.on_click(on_button_clicked_ev_prof)
     boton_tiempo.on_click(on_button_clicked_ev_time)
 
-    
+
+#Se convierte de segundos a fechas
 def set_date():
     date=[]
     t=dataset.variables[time].units
@@ -200,64 +212,86 @@ def set_date():
 
 
 
-
+#Se actualiza la interfaz para mostrar los nuevos datos despues de un cambio
 def actualiza_layout():
-
     clear()
     des=""
     max_value= "Max value: "+ str(propiedades[4])
     min_value= "Min value: "+ str(propiedades[3])
     
     try:
-        des=lista[0][propiedades[0]]+": "+dataset.variables[lista[0][propiedades[0]]].long_name
+        des=variables[0][propiedades[0]]+": "+dataset.variables[variables[0][propiedades[0]]].long_name
     except:
         des="Variable with no description"
         
     label= widgets.Label(des)
     label_min= widgets.Label(min_value)
     label_max= widgets.Label(max_value)
-    
     hb_max_min= HBox([label_min, label_max])
-    if lista[1][propiedades[0]]==4:
-        display(hb_3d, label, hb_max_min)
-        aux=dataset.variables[lista[0][propiedades[0]]][propiedades[1],propiedades[2],:,:]
+    
+    #Texto para rango de valores
+    
+    
+    hb_range= HBox([min_range, max_range, boton_range])
+    
+    if variables[1][propiedades[0]]==4:
+        display(hb_3d, label, hb_max_min, hb_range)
+        aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],propiedades[2],:,:]
         ev=vb_ev_3d
         
-    if lista[1][propiedades[0]]==3:
-        display(hb_2d, label, hb_max_min)
-        aux=dataset.variables[lista[0][propiedades[0]]][propiedades[1],:,:]
+    if variables[1][propiedades[0]]==3:
+        display(hb_2d, label, hb_max_min, hb_range)
+        aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],:,:]
         ev=vb_ev_2d
         
+    aux= np.transpose(aux)
     try:
-        widgets.Label(lista[0][propiedades[0]],": ",dataset.variables[lista[0][propiedades[0]]].long_name)
+        widgets.Label(variables[0][propiedades[0]],": ",dataset.variables[variables[0][propiedades[0]]].long_name)
     except:
         widgets.Label("Variable sin descripción")
     
     v_m= np.amin(aux[:])
-    if v_m != np.nan and v_m < 0:
+    if v_m != np.nan and v_m <= 0:
         aux[ aux==v_m ] = np.nan
-        
+       
     #aux[ aux==0 ] = np.nan
-    fig= plt.figure()
-    fig.add_subplot()
-    cmap = matplotlib.cm.jet
-    cmap.set_bad('grey',1.)
+    #fig= plt.figure()
+    #fig.add_subplot()
+    #cmap = matplotlib.cm.jet
+    #cmap.set_bad('white',1.)
 
-    plt.imshow(np.transpose(aux), interpolation='nearest', vmin= propiedades[3], vmax= propiedades[4],cmap=cmap)
-    cbar=plt.colorbar()
-    try:
-        cbar.set_label(dataset.variables[lista[0][propiedades[0]]].units)
-    except:
-        cbar.set_label("Unidades no especificadas")
-    plt.title(lista[0][propiedades[0]])
-    plt.ylabel("Latitude")
-    plt.xlabel("Longitude")
-    plt.show()
+    fig=imshow_rango(aux,min_range.value, max_range.value)
+    #plt.imshow(np.transpose(aux), interpolation='nearest', vmin= propiedades[3], vmax= propiedades[4],cmap=cmap)
+    
     
     cid = fig.canvas.mpl_connect('button_press_event', onclick)
     
     display(ev)
     
+    
+#pintar el plt.imshow con rango de valores
+def imshow_rango(v1, imin, imax):
+    v1b = masked_inside(v1,imin,imax)
+    v1a = masked_outside(v1,imin,imax)
+
+    fig,ax = plt.subplots()
+    pa = ax.imshow(v1a,interpolation='nearest',cmap = matplotlib.cm.jet)
+    pb = ax.imshow(v1b,interpolation='nearest',cmap=matplotlib.cm.gray, vmax= 3, vmin= 3)
+    cbar = plt.colorbar(pa,shrink=0.25)
+    
+    try:
+        cbar.set_label(dataset.variables[variables[0][propiedades[0]]].units)
+    except:
+        cbar.set_label("Unidades no especificadas")
+    plt.title(variables[0][propiedades[0]])
+    plt.ylabel("Latitude")
+    plt.xlabel("Longitude")
+
+    plt.show()
+    
+    return fig
+    
+#Cuando se clica en el mapa se guardan los valores de las cordenadas
 def onclick(event):
     global valor_x, valor_y
     valor_x.value=int(event.xdata)
@@ -277,7 +311,9 @@ def variable_on_change(v):
     
     
 def calcula_min_max():
-    var= dataset.variables[lista[0][propiedades[0]]][:]
+    global min_range, max_range, boton_range
+    
+    var= dataset.variables[variables[0][propiedades[0]]][:]
     v_max= np.amax(var[:])
     v_m= np.amin(var[:])
 
@@ -288,6 +324,29 @@ def calcula_min_max():
 
     propiedades[3]=v_min
     propiedades[4]=v_max
+    
+    min_range= widgets.BoundedFloatText(
+    value=propiedades[3],
+    min=propiedades[3],
+    max=propiedades[4],
+    step=1,
+    description='Min:'
+    )
+    
+    max_range= widgets.BoundedFloatText(
+    value=propiedades[4],
+    min=propiedades[3],
+    max=propiedades[4],
+    step=1,
+    description='Max:'
+    )
+    
+    boton_range= widgets.Button(
+        description='Change range'
+    )
+    boton_range.on_click(on_button_clicked_range)
+    
+    
 
 def slider_on_change(v):
     
@@ -306,15 +365,15 @@ def muestra_ev_prof():
     fig3= plt.figure()
     fig3.add_subplot()
     eje_y=[i for i in range(34)]
-    eje_x=[dataset.variables[lista[0][propiedades[0]]][propiedades[1],i,valor_x.value, valor_y.value] for i in range(34)]
+    eje_x=[dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,valor_x.value, valor_y.value] for i in range(34)]
     
     plt.plot(eje_x,eje_y)
     
-    plt.title(lista[0][propiedades[0]])
+    plt.title(variables[0][propiedades[0]])
     plt.ylabel("layer")
     
     try:
-        plt.xlabel(lista[0][propiedades[0]]+": "+dataset.variables[lista[0][propiedades[0]]].units)
+        plt.xlabel(variables[0][propiedades[0]]+": "+dataset.variables[variables[0][propiedades[0]]].units)
     except:
         plt.xlabel("#")
     
@@ -325,36 +384,43 @@ def muestra_ev_tiempo():
     eje_x=[date[i] for i in range(len(dataset.variables[time])-1)]
     ax=[]
     for i in range(int(len(dataset.variables[time])/4)):
-        d= str(date[i*4].month)+"-"+str(date[i*4].day)
+        monthinteger = date[4].month
+        month = datetime(2000, monthinteger, 1).strftime('%B')
+        d= str(month)+"-"+str(date[i*4].day)
         ax= np.append(ax, d)
         ax= np.append(ax, " ")
         ax= np.append(ax, " ")
         ax= np.append(ax, " ")
     
-    if lista[1][propiedades[0]]==4:
-        eje_y=[dataset.variables[lista[0][propiedades[0]]][i,propiedades[2],valor_x.value, valor_y.value] for i in range(dataset.dimensions[time].size -1)]
+    if variables[1][propiedades[0]]==4:
+        eje_y=[dataset.variables[variables[0][propiedades[0]]][i,propiedades[2],valor_x.value, valor_y.value] for i in range(dataset.dimensions[time].size -1)]
     
-    if lista[1][propiedades[0]]==3:
-        eje_y=[dataset.variables[lista[0][propiedades[0]]][i,valor_x.value, valor_y.value] for i in range(dataset.dimensions[time].size -1)]
+    if variables[1][propiedades[0]]==3:
+        eje_y=[dataset.variables[variables[0][propiedades[0]]][i,valor_x.value, valor_y.value] for i in range(dataset.dimensions[time].size -1)]
     
     plt.xticks(eje_x,ax)
     plt.plot(eje_x,eje_y)
-    plt.title(lista[0][propiedades[0]])
+    plt.title(variables[0][propiedades[0]])
     plt.xlabel("date")
     
     try:
-        plt.ylabel(lista[0][propiedades[0]]+": "+dataset.variables[lista[0][propiedades[0]]].units)
+        plt.ylabel(variables[0][propiedades[0]]+": "+dataset.variables[variables[0][propiedades[0]]].units)
     except:
         plt.ylabel("#")
     
 def on_button_clicked_ev_prof(b):
     actualiza_layout()
     muestra_ev_prof()
+   
 
 
 def on_button_clicked_ev_time(b):
     actualiza_layout()
     muestra_ev_tiempo()
+    
+    
+def on_button_clicked_range(b):
+    actualiza_layout()
 
 
     
