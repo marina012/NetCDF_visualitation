@@ -108,7 +108,7 @@ menu.set_title(1,'Model visualization')
 #Cuando se clica el boton se carga el fichero con el modulo indicado y se muestra la info
 @button_model_output.on_click
 def model_on_click(b):
-    global dataset, variables, propiedades
+    global dataset, variables, propiedades, range_index
     nombre_dataset= ruta+"/"+selection.value+".nc"
     dataset= Dataset(nombre_dataset, 'r', format='NETCDF4_CLASSIC')
     #variables[nombre_variable, num_dim]
@@ -118,6 +118,7 @@ def model_on_click(b):
     
     carga_variables()
     propiedades[0]=0
+    range_index=1
     set_widgets()
     
     with out:
@@ -149,7 +150,7 @@ def carga_variables():
 
 #Se inicializan los widgets 
 def set_widgets():
-    global drop_var, drop_date, depth_wid, hb_3d, hb_2d, vb_ev_2d, vb_ev_3d, valor_x, valor_y, date, vb_corte
+    global drop_var, drop_date, depth_wid, hb_3d, hb_2d, vb_ev_2d, vb_ev_3d, valor_x, valor_y, date, drop_date_range2, drop_date_range1
     
     #widgets para escoger que datos mostrar
     drop_var=widgets.Dropdown(
@@ -203,14 +204,28 @@ def set_widgets():
 
     Label_cor= widgets.Label("Click on the map to choose the coordinates:")
 
-    vb_ev_text= VBox([valor_x, valor_y])
-    vb_ev_bot= VBox([boton_tiempo, boton_prof])
-    hb_ev_3d= HBox([vb_ev_text, vb_ev_bot])
-    hb_ev_2d= HBox([vb_ev_text, boton_tiempo])
-    vb_ev_3d= VBox([Label_cor, hb_ev_3d])
-    vb_ev_2d= VBox([Label_cor, hb_ev_2d])
+    vb_ev_cor= VBox([Label_cor, valor_x, valor_y])
+    hb_corte= HBox([boton_corte_lat, boton_corte_lon])
     
-    vb_corte= VBox([boton_corte_lat, boton_corte_lon])
+    drop_date_range1=widgets.Dropdown(
+        options=[(str(date[i]), i) for i in range(0,len(date)-range_index)],
+        value=0,
+        description='From:',
+    )
+    
+    drop_date_range2=widgets.Dropdown(
+        options=[(str(date[i]), i) for i in range(range_index,len(date))],
+        value=len(date)-range_index,
+        description='To:',
+    )
+    
+    hb_time= HBox([boton_tiempo,drop_date_range1,drop_date_range2])
+    
+    vb_ev_3d= VBox([vb_ev_cor, hb_corte, hb_time, boton_prof])
+    vb_ev_2d= VBox([vb_ev_cor, hb_time])
+    
+    widgets.interact(drop_date_range1 = drop_date_range1, drop_date_range2 = drop_date_range2)
+    drop_date_range1.observe(range_on_change, names='value')
     
     boton_prof.on_click(on_button_clicked_ev_prof)
     boton_tiempo.on_click(on_button_clicked_ev_time)
@@ -291,7 +306,7 @@ def actualiza_layout():
     #Se crea un evento para coger las coordenadas escogidas
     cid = fig.canvas.mpl_connect('button_press_event', onclick)
     
-    display(HBox([ev, vb_corte]))
+    display(ev)
     
     
 #pintar el plt.imshow con rango de valores
@@ -393,6 +408,18 @@ def date_on_change(v):
     propiedades[1]=v['new']
     actualiza_layout()
     
+def range_on_change(v):
+    
+    range_index=v['new']
+    v=drop_date_range2.value
+    if range_index>v:
+        v=range_index
+    drop_date_range2.options=[(str(date[i]), i) for i in range(range_index+1,len(date))]
+    drop_date_range2.value=v
+    
+    
+  
+    
     
 #Se muestra la ev en profundidad
 def muestra_ev_prof():
@@ -419,10 +446,12 @@ def muestra_ev_tiempo():
     fig3= plt.figure()
     fig3.add_subplot()
     
-    eje_x=[date[i] for i in range(len(dataset.variables[time])-1)]
+    drop_date_range2.value
+    
+    eje_x=[date[i] for i in range(drop_date_range1.value, drop_date_range2.value)]
     ax=[]
-    for i in range(int(len(dataset.variables[time])/4)):
-        monthinteger = date[4].month
+    for i in range(drop_date_range1.value, int(drop_date_range2.value/4)):
+        monthinteger = date[4*i].month
         month = datetime(2000, monthinteger, 1).strftime('%B')
         d= str(month)+"-"+str(date[i*4].day)
         ax= np.append(ax, d)
@@ -431,10 +460,10 @@ def muestra_ev_tiempo():
         ax= np.append(ax, " ")
     
     if variables[1][propiedades[0]]==4:
-        eje_y=[dataset.variables[variables[0][propiedades[0]]][i,propiedades[2],valor_x.value, valor_y.value] for i in range(dataset.dimensions[time].size -1)]
+        eje_y=[dataset.variables[variables[0][propiedades[0]]][i,propiedades[2],valor_x.value, valor_y.value] for i in range(drop_date_range1.value, drop_date_range2.value)]
     
     if variables[1][propiedades[0]]==3:
-        eje_y=[dataset.variables[variables[0][propiedades[0]]][i,valor_x.value, valor_y.value] for i in range(dataset.dimensions[time].size -1)]
+        eje_y=[dataset.variables[variables[0][propiedades[0]]][i,valor_x.value, valor_y.value] for i in range(drop_date_range1.value, drop_date_range2.value)]
     
     plt.xticks(eje_x,ax)
     plt.plot(eje_x,eje_y)
