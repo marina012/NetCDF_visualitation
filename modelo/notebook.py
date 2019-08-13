@@ -117,10 +117,10 @@ def model_on_click(b):
     propiedades=[[],[],[],[],[],[]]
     
     carga_variables()
+    propiedades[0]=0
     set_widgets()
     
     with out:
-        propiedades[0]=0
         propiedades[1]=drop_date.value
         propiedades[2]=depth_wid.value
         calcula_min_max()
@@ -129,8 +129,13 @@ def model_on_click(b):
 
 #Se comprueba cual es la variable tiempo en el modelo y se cargan en "variables" las variables del modelo
 def carga_variables():
-    global drop_var, variables, time
+    global drop_var, variables, time, tipo
+    #tipo 0= calidad del agua, prof de mas profundo a menos
+    #tipo 1= hidrodinamico?, prof de menos a mas 
+    tipo=0
     for n in dataset.variables.keys():
+        if n.find("mesh2d_OXY") >= 0:
+            tipo=1
         if n.find("time") >= 0:
             time=n
         dimensiones=''
@@ -167,14 +172,14 @@ def set_widgets():
     valor_x= widgets.BoundedFloatText(
     value=0,
     min=0,
-    max=92,
+    max=dataset.variables[variables[0][propiedades[0]]].shape[-2]-1,
     step=1,
     description='x:'
     )
     valor_y= widgets.BoundedFloatText(
         value=0,
         min=0,
-        max=119,
+        max=dataset.variables[variables[0][propiedades[0]]].shape[-1]-1,
         step=1,
         description='y:'
     )
@@ -244,7 +249,7 @@ def actualiza_layout():
     #Muestra, si la hay, la descripcion de las variables
     des=""
     try:
-        des=(variables[0][propiedades[0]],": ",dataset.variables[variables[0][propiedades[0]]].long_name)
+        des=(variables[0][propiedades[0]]+": "+dataset.variables[variables[0][propiedades[0]]].long_name)
     except:
         des=("Variable sin descripción")
     label= widgets.Label(des)
@@ -258,8 +263,13 @@ def actualiza_layout():
     
     #Comprueba de que depende las variables, y escoge que pasarle dependiendo de eso
     if variables[1][propiedades[0]]==4:
+        depth_wid.max= dataset.variables[variables[0][propiedades[0]]].shape[-3]-1
         display(hb_3d, label, hb_max_min, hb_range)
-        aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],propiedades[2],:,:]
+        prof=propiedades[2]
+        if tipo==0:
+            dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]-1
+            prof=dimz-prof
+        aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],prof,:,:]
         ev=vb_ev_3d
         
     if variables[1][propiedades[0]]==3:
@@ -386,10 +396,11 @@ def date_on_change(v):
     
 #Se muestra la ev en profundidad
 def muestra_ev_prof():
+    dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]
     fig3= plt.figure()
     fig3.add_subplot()
-    eje_y=[i for i in range(34)]
-    eje_x=[dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,valor_x.value, valor_y.value] for i in range(34)]
+    eje_y=[i for i in range(dimz)]
+    eje_x=[dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,valor_x.value, valor_y.value] for i in range(dimz)]
     
     plt.gca().invert_yaxis()
     
@@ -453,34 +464,51 @@ def on_button_clicked_range(b):
 def on_button_clicked_corte_lat(b):
     actualiza_layout()
     fig= plt.figure()
-    
-    plt.imshow(corte_latitud(valor_y.value),interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
+    dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]
+    dimx=dataset.variables[variables[0][propiedades[0]]].shape[-2]
+    plt.imshow(corte_latitud(valor_y.value, dimx, dimz),interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
     plt.colorbar()
     
 #Muestra el corte longitudinal de unas cordenadas escogidas
 def on_button_clicked_corte_lon(b):
     actualiza_layout()
     fig= plt.figure()
-    plt.imshow(corte_longitud(valor_x.value),interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
+    dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]
+    dimy=dataset.variables[variables[0][propiedades[0]]].shape[-1]
+    plt.imshow(corte_longitud(valor_x.value, dimy, dimz),interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
     plt.colorbar()
     
 #Crea el corte longitudinal
-def corte_longitud(lon):
-    corte= np.zeros((35, 93))
-    for i in range (0,34):
+def corte_longitud(lon, dim, dimz):
+    corte= np.zeros((dimz, dim))
+    step=1
+    z0=0
+    z1=dimz-1
+    if tipo==0:
+        z0=dimz-1
+        z1=0
+        step=-1
+    for i in range (z0,z1,step):
         aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,lon,:]
         corte[i,:]=aux
         
     v_m= np.amin(corte[:])
     if v_m != np.nan and v_m <= 0:
         corte[ corte==v_m ] = np.nan
-        
+
     return corte
 
 #Crea el corte en latitud
-def corte_latitud(lat):
-    corte= np.zeros((35, 120))
-    for i in range (0,34):
+def corte_latitud(lat, dim, dimz):
+    corte= np.zeros((dimz, dim))
+    step=1
+    z0=0
+    z1=dimz-1
+    if tipo==0:
+        z0=dimz-1
+        z1=0
+        step=-1
+    for i in range (z0,z1,step):
         aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,:,lat]
         corte[i,:]=aux
         
