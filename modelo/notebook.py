@@ -187,22 +187,23 @@ def set_widgets():
 
     #widgets para ver más info
     boton_tiempo= widgets.Button(
-        description='Time'
+        description='Time evolution'
     )
 
     boton_prof= widgets.Button(
-        description='Depth'
+        description='Depth evolution'
     )
     
     boton_corte_lon= widgets.Button(
-        description='Corte lon'
+        description='Longitudinal section'
     )
     
     boton_corte_lat= widgets.Button(
-        description='Corte lat'
+        description='Latitudinal section'
     )
 
     Label_cor= widgets.Label("Click on the map to choose the coordinates:")
+    Label_display= widgets.Label("Display:")
 
     vb_ev_cor= VBox([Label_cor, valor_x, valor_y])
     hb_corte= HBox([boton_corte_lat, boton_corte_lon])
@@ -221,8 +222,8 @@ def set_widgets():
     
     hb_time= HBox([boton_tiempo,drop_date_range1,drop_date_range2])
     
-    vb_ev_3d= VBox([vb_ev_cor, hb_corte, hb_time, boton_prof])
-    vb_ev_2d= VBox([vb_ev_cor, hb_time])
+    vb_ev_3d= VBox([vb_ev_cor, Label_display, hb_corte, hb_time, boton_prof])
+    vb_ev_2d= VBox([vb_ev_cor, Label_display, hb_time])
     
     widgets.interact(drop_date_range1 = drop_date_range1, drop_date_range2 = drop_date_range2)
     drop_date_range1.observe(range_on_change, names='value')
@@ -492,23 +493,21 @@ def on_button_clicked_range(b):
 #Muestra el corte en latitud de unas cordenadas escogidas
 def on_button_clicked_corte_lat(b):
     actualiza_layout()
-    fig= plt.figure()
     dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]
     dimx=dataset.variables[variables[0][propiedades[0]]].shape[-2]
-    plt.imshow(corte_latitud(valor_y.value, dimx, dimz),interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
-    plt.colorbar()
+    corte_latitud(valor_y.value, dimx, dimz, min_range.value, max_range.value)
+    
+    
     
 #Muestra el corte longitudinal de unas cordenadas escogidas
 def on_button_clicked_corte_lon(b):
     actualiza_layout()
-    fig= plt.figure()
     dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]
     dimy=dataset.variables[variables[0][propiedades[0]]].shape[-1]
-    plt.imshow(corte_longitud(valor_x.value, dimy, dimz),interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
-    plt.colorbar()
+    corte_longitud(valor_x.value, dimy, dimz, min_range.value, max_range.value)
     
 #Crea el corte longitudinal
-def corte_longitud(lon, dim, dimz):
+def corte_longitud(lon, dim, dimz, imin, imax):
     corte= np.zeros((dimz, dim))
     step=1
     z0=0
@@ -524,11 +523,20 @@ def corte_longitud(lon, dim, dimz):
     v_m= np.amin(corte[:])
     if v_m != np.nan and v_m <= 0:
         corte[ corte==v_m ] = np.nan
+        
+        
+    v1b = masked_inside(corte,imin,imax)
+    v1a = masked_outside(corte,imin,imax)
 
-    return corte
+    fig,ax = plt.subplots()
+    pa = ax.imshow(v1a,interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
+    pb = ax.imshow(v1b,interpolation='nearest',cmap=matplotlib.cm.Pastel1, vmax= 3, vmin= 3)
+    cbar = plt.colorbar(pa,shrink=0.25)
+    
+
 
 #Crea el corte en latitud
-def corte_latitud(lat, dim, dimz):
+def corte_latitud(lat, dim, dimz, imin, imax):
     corte= np.zeros((dimz, dim))
     step=1
     z0=0
@@ -545,5 +553,12 @@ def corte_latitud(lat, dim, dimz):
     if v_m != np.nan and v_m <= 0:
         corte[ corte==v_m ] = np.nan
         
-    return corte
+    
+    v1b = masked_inside(corte,imin,imax)
+    v1a = masked_outside(corte,imin,imax)
+
+    fig,ax = plt.subplots()
+    pa = ax.imshow(v1a,interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
+    pb = ax.imshow(v1b,interpolation='nearest',cmap=matplotlib.cm.Pastel1, vmax= 3, vmin= 3)
+    cbar = plt.colorbar(pa,shrink=0.25)
 
