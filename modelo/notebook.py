@@ -1,7 +1,9 @@
+#Codigo realizado por Marina López Murcia
 #import APIs
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 import datetime
 
 import re
@@ -36,6 +38,7 @@ from ipywidgets import HBox, VBox, Layout
 from IPython.display import display
 from IPython.display import clear_output
 
+
 #Eliminar warnings
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
@@ -44,9 +47,12 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-
 #Model visualization
 
+box_layout = Layout(display='flex',
+                    align_items='center',
+                    width='auto',
+                    justify_content='space-around')
 
 #busca los ficheros netCDF en la ruta indicada
 def busca_modelos(ruta):
@@ -108,7 +114,8 @@ menu.set_title(1,'Model visualization')
 #Cuando se clica el boton se carga el fichero con el modulo indicado y se muestra la info
 @button_model_output.on_click
 def model_on_click(b):
-    global dataset, variables, propiedades, range_index
+    global dataset, variables, propiedades, range_index, animacion_on
+    animacion_on=False
     nombre_dataset= ruta+"/"+selection.value+".nc"
     dataset= Dataset(nombre_dataset, 'r', format='NETCDF4_CLASSIC')
     #variables[nombre_variable, num_dim]
@@ -187,50 +194,60 @@ def set_widgets():
 
     #widgets para ver más info
     boton_tiempo= widgets.Button(
-        description='Time evolution'
+        description='Tiempo'
+    )
+    
+    boton_animacion= widgets.Button(
+        description='Animación evolución'
     )
 
     boton_prof= widgets.Button(
-        description='Depth evolution'
+        description='Profundidad'
     )
     
     boton_corte_lon= widgets.Button(
-        description='Longitudinal section'
+        description='Longitudinal'
     )
     
     boton_corte_lat= widgets.Button(
-        description='Latitudinal section'
+        description='Latitudinal'
     )
 
-    Label_cor= widgets.Label("Click on the map to choose the coordinates:")
-    Label_display= widgets.Label("Display:")
-
-    vb_ev_cor= VBox([Label_cor, valor_x, valor_y])
-    hb_corte= HBox([boton_corte_lat, boton_corte_lon])
+    Label_cor= widgets.Label("Clicar en el mapa para escoger coordenadas:")
+    Label_display= widgets.Label("Mostrar:")
+    Label_date= widgets.Label("Rango de fechas:")
+    Label_section= widgets.Label("Mapa con corte:")
+    Label_plot= widgets.Label("Diagrama con evolución en función:")
+    
     
     drop_date_range1=widgets.Dropdown(
         options=[(str(date[i]), i) for i in range(0,len(date)-range_index)],
         value=0,
-        description='From:',
+        description='Desde:',
     )
     
     drop_date_range2=widgets.Dropdown(
         options=[(str(date[i]), i) for i in range(range_index,len(date))],
         value=len(date)-range_index,
-        description='To:',
+        description='Hasta:',
     )
     
-    hb_time= HBox([boton_tiempo,drop_date_range1,drop_date_range2])
+    vb_cor=VBox([Label_cor,valor_x, valor_y])
+    vb_date_range= VBox([Label_date,drop_date_range1,drop_date_range2])
+    hb_options= HBox([vb_cor,vb_date_range])
     
-    vb_ev_3d= VBox([vb_ev_cor, Label_display, hb_corte, hb_time, boton_prof])
-    vb_ev_2d= VBox([vb_ev_cor, Label_display, hb_time])
+    hb_corte= HBox([boton_corte_lat, boton_corte_lon], layout= box_layout)
+    hb_plot= HBox([boton_tiempo, boton_prof], layout= box_layout)
+    hb_time= HBox([boton_tiempo], layout= box_layout)
+    
+    vb_ev_3d= VBox([hb_options, Label_display,boton_animacion,Label_section, hb_corte, Label_plot,hb_plot])
+    vb_ev_2d= VBox([hb_options, Label_display,boton_animacion,Label_plot, hb_time])
     
     widgets.interact(drop_date_range1 = drop_date_range1, drop_date_range2 = drop_date_range2)
     drop_date_range1.observe(range_on_change, names='value')
-    
     boton_prof.on_click(on_button_clicked_ev_prof)
     boton_tiempo.on_click(on_button_clicked_ev_time)
-    
+    boton_animacion.on_click(on_button_clicked_animacion)
     boton_corte_lat.on_click(on_button_clicked_corte_lat)
     boton_corte_lon.on_click(on_button_clicked_corte_lon)
 
@@ -256,6 +273,8 @@ def set_date():
 
 #Se actualiza la interfaz para mostrar los nuevos datos despues de un cambio
 def actualiza_layout():
+    if animacion_on:
+        anim.event_source.stop()
     clear()
     #Mostrar estadisticas de las variables
     max_value= "Max value: "+ str(propiedades[4])
@@ -489,6 +508,12 @@ def on_button_clicked_ev_time(b):
  
 def on_button_clicked_range(b):
     actualiza_layout()
+    
+def on_button_clicked_animacion(b):
+    global anim
+    animacion_on=True
+    actualiza_layout()
+    anim=animacion()
 
 #Muestra el corte en latitud de unas cordenadas escogidas
 def on_button_clicked_corte_lat(b):
@@ -561,4 +586,44 @@ def corte_latitud(lat, dim, dimz, imin, imax):
     pa = ax.imshow(v1a,interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
     pb = ax.imshow(v1b,interpolation='nearest',cmap=matplotlib.cm.Pastel1, vmax= 3, vmin= 3)
     cbar = plt.colorbar(pa,shrink=0.25)
+    
+    
+def animacion():
+    global snapshots, im, fig
+        
+    if variables[1][propiedades[0]]==4:
+        prof=propiedades[2]
+        if tipo==0:
+            dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]-1
+            prof=dimz-prof
+        snapshots=[np.transpose(dataset.variables[variables[0][propiedades[0]]][i,prof,:,:]) for i in range(drop_date_range1.value, drop_date_range2.value)]
+        ev=vb_ev_3d
+        
+    if variables[1][propiedades[0]]==3:
+        snapshots=[np.transpose(dataset.variables[variables[0][propiedades[0]]][i,:,:]) for i in range(drop_date_range1.value, drop_date_range2.value)]
+        
+    v_m= np.amin(snapshots[0][:])
+    for i in range(len(snapshots)):
+        aux=snapshots[i]
+        aux[ aux==v_m ] = np.nan
+        snapshots[i]=aux
 
+    fig = plt.figure()
+
+    a = snapshots[0]
+    
+    im = plt.imshow(a, interpolation='none', aspect='auto', cmap = matplotlib.cm.jet,vmin= propiedades[3], vmax= propiedades[4])
+    plt.colorbar()
+    
+    anim = animation.FuncAnimation(
+                               fig, 
+                               animate_func, 
+                               frames = len(date),
+                               interval = 500, # in ms
+                                   )
+    return anim
+
+def animate_func(i):
+    im.set_array(snapshots[i])
+    return [im]
+    
