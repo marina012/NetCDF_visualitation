@@ -1,4 +1,9 @@
-#Codigo realizado por Marina López Murcia
+"""
+    Visualización de modelos basados en netCDF
+    Marina López Murcia
+    14-08-2019
+"""
+
 #import APIs
 import pandas as pd
 import matplotlib
@@ -587,7 +592,8 @@ def corte_latitud(lat, dim, dimz, imin, imax):
     pb = ax.imshow(v1b,interpolation='nearest',cmap=matplotlib.cm.Pastel1, vmax= 3, vmin= 3)
     cbar = plt.colorbar(pa,shrink=0.25)
     
-    
+  
+#Crea una animación sobre la evolución de la variable en una cierta profundidad en el tiempo y retorna una instancia de ella para que se ejecute correctamente
 def animacion():
     global snapshots, im, fig
         
@@ -623,6 +629,7 @@ def animacion():
                                    )
     return anim
 
+#Función para crear la animación
 def animate_func(i):
     im.set_array(snapshots[i])
     return [im]
