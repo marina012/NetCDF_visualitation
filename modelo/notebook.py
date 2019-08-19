@@ -145,10 +145,13 @@ def carga_variables():
     global drop_var, variables, time, tipo
     #tipo 0= calidad del agua, prof de mas profundo a menos
     #tipo 1= hidrodinamico?, prof de menos a mas 
-    tipo=0
+    tipo=1
     for n in dataset.variables.keys():
-        if n.find("mesh2d_OXY") >= 0:
-            tipo=1
+        if n.find("R1") >= 0 and tipo == 1:
+            tipo=0
+            variables[0]= np.append(variables[0],"TEMPERATURE")
+            variables[1]= np.append(variables[1],-1)
+            variables[2]= np.append(variables[2],"TEMPERATURE")
         if n.find("time") >= 0:
             time=n
         dimensiones=''
@@ -316,6 +319,15 @@ def actualiza_layout():
             prof=dimz-prof
         aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],prof,:,:]
         ev=vb_ev_3d
+    
+    if variables[1][propiedades[0]]==-1:
+        depth_wid.max= dataset.variables["R1"].shape[-3]-1
+        display(hb_3d, label, hb_max_min, hb_range)
+        prof=propiedades[2]
+        dimz=dataset.variables["R1"].shape[-3]-1
+        prof=dimz-prof
+        aux=dataset.variables["R1"][propiedades[1],1,prof,:,:]
+        ev=vb_ev_3d
         
     if variables[1][propiedades[0]]==3:
         display(hb_2d, label, hb_max_min, hb_range)
@@ -392,8 +404,10 @@ def variable_on_change(v):
 def calcula_min_max():
     global min_range, max_range, boton_range
     
-    var= dataset.variables[variables[0][propiedades[0]]][:]
-    
+    if variables[1][propiedades[0]]==-1:
+        var= dataset.variables["R1"][:,1,:,:,:]
+    else:
+        var= dataset.variables[variables[0][propiedades[0]]][:]
     v_m= np.nanmin(var[:])
     try:
         var[ var==v_m ] = np.nan
@@ -460,12 +474,18 @@ def range_on_change(v):
     
 #Se muestra la ev en profundidad
 def muestra_ev_prof():
-    dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]
+    
     fig3= plt.figure()
     fig3.add_subplot()
-    eje_y=[i for i in range(dimz)]
-    eje_x=[dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,valor_x.value, valor_y.value] for i in range(dimz)]
     
+    if variables[1][propiedades[0]]==-1:
+        dimz=dataset.variables["R1"].shape[-3]
+        eje_x=[dataset.variables["R1"][propiedades[1],1,i,valor_x.value, valor_y.value] for i in range(dimz)]
+    else:
+        dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]
+        eje_x=[dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,valor_x.value, valor_y.value] for i in range(dimz)]
+        
+    eje_y=[i for i in range(dimz)]
     plt.gca().invert_yaxis()
     
     plt.plot(eje_x,eje_y)
@@ -501,7 +521,10 @@ def muestra_ev_tiempo():
     
     if variables[1][propiedades[0]]==3:
         eje_y=[dataset.variables[variables[0][propiedades[0]]][i,valor_x.value, valor_y.value] for i in range(drop_date_range1.value, drop_date_range2.value)]
-    
+        
+    if variables[1][propiedades[0]]==-1:
+        eje_y=[dataset.variables["R1"][i,1,propiedades[2],valor_x.value, valor_y.value] for i in range(drop_date_range1.value, drop_date_range2.value)]
+        
     plt.xticks(eje_x,ax)
     plt.plot(eje_x,eje_y)
     plt.title(variables[0][propiedades[0]])
@@ -535,8 +558,12 @@ def on_button_clicked_animacion(b):
 #Muestra el corte en latitud de unas cordenadas escogidas
 def on_button_clicked_corte_lat(b):
     actualiza_layout()
-    dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]
-    dimx=dataset.variables[variables[0][propiedades[0]]].shape[-2]
+    if variables[1][propiedades[0]]==-1:
+        dimz=dataset.variables["R1"].shape[-3]
+        dimx=dataset.variables["R1"].shape[-2]
+    else:
+        dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]
+        dimx=dataset.variables[variables[0][propiedades[0]]].shape[-2]
     corte_latitud(valor_y.value, dimx, dimz, min_range.value, max_range.value)
     
     
@@ -544,8 +571,13 @@ def on_button_clicked_corte_lat(b):
 #Muestra el corte longitudinal de unas cordenadas escogidas
 def on_button_clicked_corte_lon(b):
     actualiza_layout()
-    dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]
-    dimy=dataset.variables[variables[0][propiedades[0]]].shape[-1]
+    if variables[1][propiedades[0]]==-1:
+        dimz=dataset.variables["R1"].shape[-3]
+        dimy=dataset.variables["R1"].shape[-1]
+    else:
+        dimz=dataset.variables[variables[0][propiedades[0]]].shape[-3]
+        dimy=dataset.variables[variables[0][propiedades[0]]].shape[-1]
+        
     corte_longitud(valor_x.value, dimy, dimz, min_range.value, max_range.value)
     
 #Crea el corte longitudinal
@@ -558,10 +590,16 @@ def corte_longitud(lon, dim, dimz, imin, imax):
         z0=dimz-1
         z1=0
         step=-1
-    for i in range (z0,z1,step):
-        aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,lon,:]
-        corte[i,:]=aux
         
+    if variables[1][propiedades[0]]==-1:
+        for i in range (z0,z1,step):
+            aux=dataset.variables["R1"][propiedades[1],1,i,lon,:]
+            corte[i,:]=aux
+    else:
+        for i in range (z0,z1,step):
+            aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,lon,:]
+            corte[i,:]=aux
+            
     v_m= np.nanmin(corte[:])
     try:
         corte[ corte==v_m ] = np.nan
@@ -590,10 +628,16 @@ def corte_latitud(lat, dim, dimz, imin, imax):
         z0=dimz-1
         z1=0
         step=-1
-    for i in range (z0,z1,step):
-        aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,:,lat]
-        corte[i,:]=aux
         
+    if variables[1][propiedades[0]]==-1:
+        for i in range (z0,z1,step):
+            aux=dataset.variables["R1"][propiedades[1],1,i,:,lat]
+            corte[i,:]=aux
+    else:
+        for i in range (z0,z1,step):
+            aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,:,lat]
+            corte[i,:]=aux
+            
     v_m= np.nanmin(corte[:])
     try:
         corte[ corte==v_m ] = np.nan
@@ -626,6 +670,13 @@ def animacion():
     if variables[1][propiedades[0]]==3:
         snapshots=[np.transpose(dataset.variables[variables[0][propiedades[0]]][i,:,:]) for i in range(drop_date_range1.value, drop_date_range2.value)]
         
+    if variables[1][propiedades[0]]==-1:
+        prof=propiedades[2]
+        dimz=dataset.variables["R1"].shape[-3]-1
+        prof=dimz-prof
+        snapshots=[np.transpose(dataset.variables["R1"][i,1,prof,:,:]) for i in range(drop_date_range1.value, drop_date_range2.value)]
+        ev=vb_ev_3d
+        
     v_m= np.nanmin(snapshots[0][:])
     for i in range(len(snapshots)):
         aux=snapshots[i]
@@ -654,5 +705,6 @@ def animacion():
 #Función para crear la animación
 def animate_func(i):
     im.set_array(snapshots[i])
+    plt.title(date[i])
     return [im]
     
