@@ -1,7 +1,7 @@
 """
     Visualización de modelos basados en netCDF
     Marina López Murcia
-    14-08-2019
+    16-08-2019
 """
 
 #import APIs
@@ -123,8 +123,8 @@ def model_on_click(b):
     animacion_on=False
     nombre_dataset= ruta+"/"+selection.value+".nc"
     dataset= Dataset(nombre_dataset, 'r', format='NETCDF4_CLASSIC')
-    #variables[nombre_variable, num_dim]
-    variables=[[],[]]
+    #variables[nombre_variable, num_dim, descripcion]
+    variables=[[],[],[]]
     #propiedades[index_var_escogida,fecha,profundidad,min_value_var, max_value_var, mean_value_var]
     propiedades=[[],[],[],[],[],[]]
     
@@ -159,6 +159,11 @@ def carga_variables():
         if dim > 2 and dim <5:
             variables[0]= np.append(variables[0],n)
             variables[1]= np.append(variables[1],dim)
+            try:
+                des=(n+": "+dataset.variables[n].long_name)
+            except:
+                des=(n)
+            variables[2]= np.append(variables[2],des)
 
 #Se inicializan los widgets 
 def set_widgets():
@@ -166,7 +171,7 @@ def set_widgets():
     
     #widgets para escoger que datos mostrar
     drop_var=widgets.Dropdown(
-        options=[(variables[0][n], n) for n in range(len(variables[0]))],
+        options=[(variables[2][n], n) for n in range(len(variables[2]))],
         value=0,
         description='Variables:',
     )
@@ -321,9 +326,13 @@ def actualiza_layout():
     
     
     #Convierte los valores de relleno en nan para que no se pinten en el mapa
-    v_m= np.amin(aux[:])
-    if v_m != np.nan and v_m <= 0:
+    v_m= np.nanmin(aux[:])
+    try:
         aux[ aux==v_m ] = np.nan
+    except:
+        print("fallo")
+        
+        
        
 
     fig=imshow_rango(aux,min_range.value, max_range.value)
@@ -342,6 +351,7 @@ def imshow_rango(v1, imin, imax):
     v1a = masked_outside(v1,imin,imax)
 
     fig,ax = plt.subplots()
+    fig.tight_layout
     pa = ax.imshow(v1a,interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
     pb = ax.imshow(v1b,interpolation='nearest',cmap=matplotlib.cm.Pastel1, vmax= 3, vmin= 3)
     cbar = plt.colorbar(pa,shrink=0.25)
@@ -384,9 +394,11 @@ def calcula_min_max():
     
     var= dataset.variables[variables[0][propiedades[0]]][:]
     
-    v_m= np.amin(var[:])
-    if v_m != np.nan and v_m <= 0:
+    v_m= np.nanmin(var[:])
+    try:
         var[ var==v_m ] = np.nan
+    except:
+        print("fallo")
         
         
     v_mean= np.nanmean(var[:])
@@ -550,15 +562,18 @@ def corte_longitud(lon, dim, dimz, imin, imax):
         aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,lon,:]
         corte[i,:]=aux
         
-    v_m= np.amin(corte[:])
-    if v_m != np.nan and v_m <= 0:
+    v_m= np.nanmin(corte[:])
+    try:
         corte[ corte==v_m ] = np.nan
+    except:
+        print("fallo")
         
         
     v1b = masked_inside(corte,imin,imax)
     v1a = masked_outside(corte,imin,imax)
 
     fig,ax = plt.subplots()
+    fig.tight_layout
     pa = ax.imshow(v1a,interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
     pb = ax.imshow(v1b,interpolation='nearest',cmap=matplotlib.cm.Pastel1, vmax= 3, vmin= 3)
     cbar = plt.colorbar(pa,shrink=0.25)
@@ -579,15 +594,18 @@ def corte_latitud(lat, dim, dimz, imin, imax):
         aux=dataset.variables[variables[0][propiedades[0]]][propiedades[1],i,:,lat]
         corte[i,:]=aux
         
-    v_m= np.amin(corte[:])
-    if v_m != np.nan and v_m <= 0:
+    v_m= np.nanmin(corte[:])
+    try:
         corte[ corte==v_m ] = np.nan
+    except:
+        print("fallo")
         
     
     v1b = masked_inside(corte,imin,imax)
     v1a = masked_outside(corte,imin,imax)
 
     fig,ax = plt.subplots()
+    fig.tight_layout
     pa = ax.imshow(v1a,interpolation='nearest',cmap = matplotlib.cm.jet, vmin= min_range.value, vmax= max_range.value)
     pb = ax.imshow(v1b,interpolation='nearest',cmap=matplotlib.cm.Pastel1, vmax= 3, vmin= 3)
     cbar = plt.colorbar(pa,shrink=0.25)
@@ -608,16 +626,20 @@ def animacion():
     if variables[1][propiedades[0]]==3:
         snapshots=[np.transpose(dataset.variables[variables[0][propiedades[0]]][i,:,:]) for i in range(drop_date_range1.value, drop_date_range2.value)]
         
-    v_m= np.amin(snapshots[0][:])
+    v_m= np.nanmin(snapshots[0][:])
     for i in range(len(snapshots)):
         aux=snapshots[i]
-        aux[ aux==v_m ] = np.nan
+        try:
+            aux[ aux==v_m ] = np.nan
+        except:
+            print("fallo")
         snapshots[i]=aux
 
     fig = plt.figure()
 
     a = snapshots[0]
     
+    plt.tight_layout
     im = plt.imshow(a, interpolation='none', aspect='auto', cmap = matplotlib.cm.jet,vmin= propiedades[3], vmax= propiedades[4])
     plt.colorbar()
     
